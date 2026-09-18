@@ -1,0 +1,49 @@
+name: DTest-Style Game Engine CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build-and-test:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup MSBuild (for Native C++)
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Setup .NET (for C# Test Runner)
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Compile Native C++ Engine
+        run: |
+          msbuild CrashHandler/CrashHandler.vcxproj /p:Configuration=Release /p:Platform=x64
+
+      - name: Compile C# Automation Tool
+        run: |
+          dotnet build AutomationTool/AutomationTool.csproj -c Release
+
+      - name: Execute Automated Headless Integration Test
+        shell: powershell
+        run: |
+          # Start C++ Engine in background
+          $engine = Start-Process -FilePath "CrashHandler/x64/Release/CrashHandler.exe" -PassThru
+          Start-Sleep -Seconds 2
+
+          # Run C# Automated Test Suite
+          $testRunner = Start-Process -FilePath "AutomationTool/bin/Release/net8.0/AutomationTool.exe" -Wait -PassThru
+
+          # Assert test exit code
+          if ($testRunner.ExitCode -ne 0) {
+              Write-Error "Integration tests failed with exit code $($testRunner.ExitCode)"
+              exit 1
+          } else {
+              Write-Host "All automation integration tests PASSED successfully!"
+          }

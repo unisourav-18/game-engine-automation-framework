@@ -1,0 +1,14 @@
+# Visual Studio / MSVC build outputs
+.vs/
+*.user
+x64/
+Debug/
+Release/
+
+# C# build outputs
+bin/
+obj/
+
+# Test Artifacts / Crash Dumps
+*.dmp
+*.log
