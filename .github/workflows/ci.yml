@@ -24,7 +24,7 @@ jobs:
 
       - name: Compile Native C++ Engine
         run: |
-          msbuild GameTestAutomation/CrashHandler.vcxproj /p:Configuration=Release /p:Platform=x64
+          msbuild CrashHandler.vcxproj /p:Configuration=Release /p:Platform=x64
 
       - name: Compile C# Automation Tool
         run: |
