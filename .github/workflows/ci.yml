@@ -14,10 +14,10 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Setup MSBuild (for Native C++)
+      - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
 
-      - name: Setup .NET (for C# Test Runner)
+      - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
@@ -33,17 +33,41 @@ jobs:
       - name: Execute Automated Headless Integration Test
         shell: powershell
         run: |
-          # Start C++ Engine in background
-          $engine = Start-Process -FilePath "CrashHandler/x64/Release/CrashHandler.exe" -PassThru
-          Start-Sleep -Seconds 2
+          # 1. Dynamically locate the built CrashHandler.exe and AutomationTool.exe
+          $engineItem = Get-ChildItem -Path . -Recurse -Filter "CrashHandler.exe" | Where-Object { $_.FullName -like "*Release*" } | Select-Object -First 1
+          $toolItem = Get-ChildItem -Path . -Recurse -Filter "AutomationTool.exe" | Where-Object { $_.FullName -like "*Release*" } | Select-Object -First 1
 
-          # Run C# Automated Test Suite
-          $testRunner = Start-Process -FilePath "AutomationTool/bin/Release/net8.0/AutomationTool.exe" -Wait -PassThru
+          if (-not $engineItem) {
+              Write-Error "Could not locate compiled CrashHandler.exe in Release folder!"
+              exit 1
+          }
 
-          # Assert test exit code
-          if ($testRunner.ExitCode -ne 0) {
-              Write-Error "Integration tests failed with exit code $($testRunner.ExitCode)"
+          if (-not $toolItem) {
+              Write-Error "Could not locate compiled AutomationTool.exe in Release folder!"
+              exit 1
+          }
+
+          $enginePath = $engineItem.FullName
+          $toolPath = $toolItem.FullName
+
+          Write-Host "Located Engine Executable: $enginePath"
+          Write-Host "Located Test Runner Executable: $toolPath"
+
+          # 2. Launch C++ Engine in background and wait for IPC pipe initialization
+          $engineProcess = Start-Process -FilePath $enginePath -PassThru
+          Start-Sleep -Seconds 3
+
+          # 3. Launch C# Test Runner and wait for execution to complete
+          $toolProcess = Start-Process -FilePath $toolPath -Wait -PassThru
+
+          # 4. Check test runner exit code (0 = all pass, 1 = failure)
+          if ($toolProcess.ExitCode -ne 0) {
+              Write-Error "Automated test suite failed with exit code $($toolProcess.ExitCode)"
+              # Ensure background engine is killed if it didn't exit
+              Stop-Process -Id $engineProcess.Id -Force -ErrorAction SilentlyContinue
               exit 1
           } else {
-              Write-Host "All automation integration tests PASSED successfully!"
+              Write-Host "========================================="
+              Write-Host "All automated integration tests PASSED!"
+              Write-Host "========================================="
           }
